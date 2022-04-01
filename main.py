@@ -3,21 +3,13 @@ import re
 import requests
 from bs4 import BeautifulSoup, Comment
 import spacy
+import math
 
 
 def main():
     stop_words = load_stop_words()
 
-    dicts = [
-        {},
-        {},
-        {},
-        {},
-        {},
-        {}
-    ]
-
-    """
+    term_dict = {}
 
     urls = [
         "https://en.wikipedia.org/wiki/Machine_learning",
@@ -28,9 +20,9 @@ def main():
         "http://cis.csuohio.edu/~sschung/"
     ]
 
-    """
+    document_word_lengths = []
 
-    urls = ["https://en.wikipedia.org/wiki/Data_mining"]
+    # urls = ["https://en.wikipedia.org/wiki/Data_mining"]
 
     index = 0
 
@@ -43,38 +35,106 @@ def main():
             if text.parent.name != 'script' and text.parent.name != 'style' and text.parent.name != 'img' and len(text) != 0 and text != "\n" and not isinstance(text, Comment):
                 words.append(text)
 
-        file = "test" + str(index + 1) + ".txt"
-        with open(file,  "w", encoding="utf-8") as f:
-            for word in words:
-                f.write(str(word))
+        # file = "test" + str(index + 1) + ".txt"
+        # with open(file,  "w", encoding="utf-8") as f:
+            # for word in words:
+                # f.write(str(word))
+        # f.close()
 
-        f.close()
-
-        dicts[index] = parse_words(words, stop_words)
-
+        document_word_lengths.append(len(words))
+        term_dict = parse_words(words, stop_words, term_dict, index + 1)
         index += 1
 
-    print_dicts(dicts, urls)
+    write_search_term_freq(term_dict)
+    write_term_freq(term_dict)
+
+    tfidf_calculation(term_dict, urls, document_word_lengths)
 
 
-def print_dicts(dicts, urls):
+def tfidf_calculation(terms, urls, document_word_lengths):
+    keywords = [
+        "research",
+        "data",
+        "mining",
+        "analytics",
+        "data_mining",
+        "machine_learning",
+        "deep_learning"
+    ]
 
-    index = 0
+    tfidf_for_keywords = {}
 
-    for dictionary in dicts:
+    for word in sorted(terms.keys()):
+        if word in keywords:
+            tf = 0
+            df = 0
+            parsed = False
+            for i in range(len(urls)):
+                doc = str(i + 1)
+                if doc in terms[word]:
+                    tf = terms[word][doc] / document_word_lengths[i]
+                else:
+                    tf = 0
+                df = math.log(len(urls) / len(terms[word]))
+                if parsed:
+                    tfidf_for_keywords[word][doc] = (tf * df)
+                else:
+                    tfidf_for_keywords[word] = {doc: (tf * df)}
+                    parsed = True
 
-        counter = 0
+    # print(tfidf_for_keywords)
+    highest_score = 0
+    winner = 0
 
-        for item in sorted(dictionary, key=dictionary.get, reverse=True):
-            if counter > 15:
-                break
-            else:
-                print("For url: " + urls[index] + " is: " +
-                      str(item) + " , " + str(dictionary[item]))
+    for i in range(len(urls)):
+        score = 0
+        for word in keywords:
+            score += tfidf_for_keywords[word][str(i + 1)]
+        print(score)
+        if score > highest_score:
+            winner = i + 1
+            highest_score = score
 
-            counter += 1
+    print("Document that is most suited for the keywords is doc#: " +
+          str(winner) + " which is url " + urls[winner - 1])
 
-        index += 1
+
+def write_term_freq(terms):
+
+    with open("terms.txt",  "w", encoding="utf-8") as f:
+
+        f.write("Term\t\t\tDoc#\t\t\tFreq\n")
+
+        for word in sorted(terms.keys()):
+            for key in terms[word].keys():
+                f.write(word + "\t\t\t" + str(key) + "\t\t\t" +
+                        str(terms[word][str(key)]) + "\n")
+
+    f.close()
+
+
+def write_search_term_freq(terms):
+    keywords = [
+        "research",
+        "data",
+        "mining",
+        "analytics",
+        "data_mining",
+        "machine_learning",
+        "deep_learning"
+    ]
+
+    with open("search_terms.txt",  "w", encoding="utf-8") as f:
+
+        f.write("Term\t\t\tDoc#\t\t\tFreq\n")
+
+        for word in sorted(terms.keys()):
+            if word in keywords:
+                for key in terms[word].keys():
+                    f.write(word + "\t\t\t" + str(key) + "\t\t\t" +
+                            str(terms[word][str(key)]) + "\n")
+
+    f.close()
 
 
 def load_stop_words():
@@ -91,11 +151,9 @@ def load_stop_words():
     return stop_words
 
 
-def parse_words(list_of_words, stop_words):
+def parse_words(list_of_words, stop_words, word_dict, doc_num):
     counter = 0
     sp = spacy.load('en_core_web_sm')
-
-    word_dict = {}
 
     for words in list_of_words:
 
@@ -105,31 +163,48 @@ def parse_words(list_of_words, stop_words):
         for word in sentence:
             lemma = word.lemma_
 
+            if lemma == "datum":
+                lemma = "data"
+
+            if lemma == "analytic":
+                lemma = "analytics"
+
             lemma = ''.join(i for i in str(lemma) if i.isalnum())
             lemma = lemma.lower()
-            # and word.pos_ != "PUNCT" and word.pos_ != "SYM" and word.pos_ != "NUM"
-            if len(lemma) > 0 and lemma not in stop_words and not find_num(lemma):
+            if len(lemma) > 0 and lemma not in stop_words and not find_num(lemma) and word.pos_ != "PUNCT" and word.pos_ != "SYM" and word.pos_ != "NUM":
                 if len(bi_gram) == 0:
-                    if lemma == "datum" or lemma == "data" or lemma == "deep" or lemma == "machine":
+                    if lemma == "data" or lemma == "deep" or lemma == "machine":
                         bi_gram = lemma
-                    else:
-                        if lemma in word_dict:
-                            word_dict[lemma] += 1
+                    if lemma in word_dict:
+                        if str(doc_num) not in word_dict[lemma]:
+                            word_dict[lemma][str(doc_num)] = 1
                         else:
-                            word_dict[lemma] = 1
+                            word_dict[lemma][str(doc_num)] += 1
+                    else:
+                        word_dict[lemma] = {str(doc_num): 1}
                 else:
-                    if bi_gram == "datum":
-                        bi_gram = "data"
+                    if lemma in word_dict:
+                        if str(doc_num) not in word_dict[lemma]:
+                            word_dict[lemma][str(doc_num)] = 1
+                        else:
+                            word_dict[lemma][str(doc_num)] += 1
+                    else:
+                        word_dict[lemma] = {str(doc_num): 1}
+
                     combind_word = bi_gram + "_" + lemma
+
                     if combind_word == "data_mining" or combind_word == "deep_learning" or combind_word == "machine_learning":
                         if combind_word in word_dict:
-                            word_dict[combind_word] += 1
+                            if str(doc_num) not in word_dict[combind_word]:
+                                word_dict[combind_word][str(doc_num)] = 1
+                            else:
+                                word_dict[combind_word][str(doc_num)] += 1
                         else:
-                            word_dict[combind_word] = 1
+                            word_dict[combind_word] = {str(doc_num): 1}
                     bi_gram = ""
 
         counter += 1
-        # print(counter)
+        print(counter)
 
     return word_dict
 
