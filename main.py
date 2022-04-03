@@ -1,5 +1,3 @@
-import sys
-import re
 import requests
 from bs4 import BeautifulSoup, Comment
 import spacy
@@ -22,8 +20,6 @@ def main():
 
     document_word_lengths = []
 
-    # urls = ["https://en.wikipedia.org/wiki/Data_mining"]
-
     index = 0
 
     for url in urls:
@@ -34,12 +30,6 @@ def main():
         for text in soup.find_all(string=True):
             if text.parent.name != 'script' and text.parent.name != 'style' and text.parent.name != 'img' and len(text) != 0 and text != "\n" and not isinstance(text, Comment):
                 words.append(text)
-
-        # file = "test" + str(index + 1) + ".txt"
-        # with open(file,  "w", encoding="utf-8") as f:
-            # for word in words:
-                # f.write(str(word))
-        # f.close()
 
         document_word_lengths.append(len(words))
         term_dict = parse_words(words, stop_words, term_dict, index + 1)
@@ -82,7 +72,6 @@ def tfidf_calculation(terms, urls, document_word_lengths):
                     tfidf_for_keywords[word] = {doc: (tf * df)}
                     parsed = True
 
-    # print(tfidf_for_keywords)
     highest_score = 0
     winner = 0
 
@@ -90,7 +79,7 @@ def tfidf_calculation(terms, urls, document_word_lengths):
         score = 0
         for word in keywords:
             score += tfidf_for_keywords[word][str(i + 1)]
-        print(score)
+        print("tf-idf score for doc " + str(i + 1) + " is: " + str(score))
         if score > highest_score:
             winner = i + 1
             highest_score = score
@@ -151,8 +140,19 @@ def load_stop_words():
     return stop_words
 
 
+def add_to_dict(word_dict, doc_num, word):
+    if word in word_dict:
+        if str(doc_num) not in word_dict[word]:
+            word_dict[word][str(doc_num)] = 1
+        else:
+            word_dict[word][str(doc_num)] += 1
+    else:
+        word_dict[word] = {str(doc_num): 1}
+
+    return word_dict
+
+
 def parse_words(list_of_words, stop_words, word_dict, doc_num):
-    counter = 0
     sp = spacy.load('en_core_web_sm')
 
     for words in list_of_words:
@@ -175,36 +175,16 @@ def parse_words(list_of_words, stop_words, word_dict, doc_num):
                 if len(bi_gram) == 0:
                     if lemma == "data" or lemma == "deep" or lemma == "machine":
                         bi_gram = lemma
-                    if lemma in word_dict:
-                        if str(doc_num) not in word_dict[lemma]:
-                            word_dict[lemma][str(doc_num)] = 1
-                        else:
-                            word_dict[lemma][str(doc_num)] += 1
-                    else:
-                        word_dict[lemma] = {str(doc_num): 1}
+                    word_dict = add_to_dict(word_dict, doc_num, lemma)
                 else:
-                    if lemma in word_dict:
-                        if str(doc_num) not in word_dict[lemma]:
-                            word_dict[lemma][str(doc_num)] = 1
-                        else:
-                            word_dict[lemma][str(doc_num)] += 1
-                    else:
-                        word_dict[lemma] = {str(doc_num): 1}
+                    word_dict = add_to_dict(word_dict, doc_num, lemma)
 
                     combind_word = bi_gram + "_" + lemma
 
                     if combind_word == "data_mining" or combind_word == "deep_learning" or combind_word == "machine_learning":
-                        if combind_word in word_dict:
-                            if str(doc_num) not in word_dict[combind_word]:
-                                word_dict[combind_word][str(doc_num)] = 1
-                            else:
-                                word_dict[combind_word][str(doc_num)] += 1
-                        else:
-                            word_dict[combind_word] = {str(doc_num): 1}
+                        word_dict = add_to_dict(
+                            word_dict, doc_num, combind_word)
                     bi_gram = ""
-
-        counter += 1
-        print(counter)
 
     return word_dict
 
